@@ -26,6 +26,13 @@ wrong label. It cannot make the action say, run, or fetch anything.
    gh secret set TYPESAFE_API_KEY
    ```
 
+   This prompts for the value, so paste the key and press Enter; it is not echoed and stays out of your shell
+   history. If the key is already in an environment variable, pipe it in instead:
+
+   ```sh
+   printenv TYPESAFE_API_KEY | gh secret set TYPESAFE_API_KEY
+   ```
+
 2. Add `.github/workflows/label-issues.yml`:
 
    ```yaml
