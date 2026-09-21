@@ -8,10 +8,10 @@ branding:
 
 inputs:
   api-key:
-    description: TypeSafe API key. Store it as a repository secret and pass it as `${{ secrets.TYPESAFE_API_KEY }}`.
+    description: TypeSafe API key. Store it as a repository secret and pass that secret here.
     required: true
   github-token:
-    description: Token used to read the repository's labels and add labels to the issue. Needs `issues: write`.
+    description: "Token used to read the repository's labels and add labels to the issue. Needs the issues write permission."
     required: true
     default: ${{ github.token }}
   model:
