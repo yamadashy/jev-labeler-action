@@ -1,5 +1,5 @@
 name: Jev Issue Labeler
-description: Label new issues with TypeSafe's Jev model — one yes/no question per repository label, no generated text.
+description: Zero-config AI issue labeling with TypeSafe's Jev. One yes/no question per label, no generated text.
 author: Kazuki Yamada
 
 branding:
