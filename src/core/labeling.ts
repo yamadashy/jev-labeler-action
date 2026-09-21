@@ -37,7 +37,14 @@ export interface PlanOptions {
   repoLabels: RepoLabel[];
   /** When non-empty, only these labels are considered. */
   allowlist?: string[];
+  /** Labels the user never wants applied. Wins over everything else. */
   excludes?: string[];
+  /**
+   * Labels left out unless the user names them in `allowlist` or `criteria`.
+   * These are maintainer decisions, not properties of the text, so asking about
+   * them by default only produces wrong labels on a fresh repository.
+   */
+  builtinExcludes?: string[];
   /** Label name to plain-language condition; overrides the GitHub description. */
   criteria?: Record<string, string>;
   subject: LabelSubject;
@@ -70,6 +77,7 @@ export function buildPlan(options: PlanOptions): EvaluationPlan {
   const criteria = options.criteria ?? {};
   const allowlist = new Set((options.allowlist ?? []).map(canonical));
   const excludes = new Set((options.excludes ?? []).map(canonical));
+  const builtinExcludes = new Set((options.builtinExcludes ?? []).map(canonical));
   const present = new Set(subject.labels.map(canonical));
 
   // Criteria are keyed by whatever the user typed; index them case-insensitively.
@@ -92,6 +100,12 @@ export function buildPlan(options: PlanOptions): EvaluationPlan {
       continue;
     }
     if (excludes.has(key)) {
+      skipped.push({ label: repoLabel.name, probability: null, status: 'excluded' });
+      continue;
+    }
+    // Naming a built-in exclusion in `labels` or `criteria` is how a user asks
+    // for it back; there is no separate switch for that.
+    if (builtinExcludes.has(key) && !allowlist.has(key) && override === undefined) {
       skipped.push({ label: repoLabel.name, probability: null, status: 'excluded' });
       continue;
     }

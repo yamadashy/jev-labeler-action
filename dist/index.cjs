@@ -31725,7 +31725,7 @@ function getOctokit(token, options, ...additionalPlugins) {
 
 // src/core/inputs.ts
 var import_yaml = __toESM(require_dist(), 1);
-var DEFAULT_EXCLUDE_LABELS = ["duplicate", "invalid", "wontfix", "good first issue", "help wanted"];
+var BUILTIN_EXCLUDE_LABELS = ["duplicate", "invalid", "wontfix", "good first issue", "help wanted"];
 var DEFAULT_THRESHOLD = 0.8;
 var DEFAULT_MAX_BODY_CHARS = 6e3;
 function parseList(raw) {
@@ -31803,6 +31803,7 @@ function buildPlan(options) {
   const criteria = options.criteria ?? {};
   const allowlist = new Set((options.allowlist ?? []).map(canonical));
   const excludes = new Set((options.excludes ?? []).map(canonical));
+  const builtinExcludes = new Set((options.builtinExcludes ?? []).map(canonical));
   const present = new Set(subject.labels.map(canonical));
   const criteriaByCanonical = new Map(
     Object.entries(criteria).map(([label, condition]) => [canonical(label), condition])
@@ -31820,6 +31821,10 @@ function buildPlan(options) {
       continue;
     }
     if (excludes.has(key)) {
+      skipped.push({ label: repoLabel.name, probability: null, status: "excluded" });
+      continue;
+    }
+    if (builtinExcludes.has(key) && !allowlist.has(key) && override === void 0) {
       skipped.push({ label: repoLabel.name, probability: null, status: "excluded" });
       continue;
     }
@@ -32011,6 +32016,7 @@ async function labelSubject(subject, repoLabels, config, askFn = ask) {
     subject,
     allowlist: config.allowlist,
     excludes: config.excludes,
+    builtinExcludes: config.builtinExcludes,
     criteria: config.criteria
   });
   if (plan.planned.length === 0) {
@@ -32190,8 +32196,7 @@ async function run() {
   const threshold = parseThreshold(getInput("threshold"));
   const maxBodyChars = parseMaxBodyChars(getInput("max-body-chars"));
   const allowlist = parseList(getInput("labels"));
-  const excludeInput = getInput("exclude-labels");
-  const excludes = excludeInput.trim() === "" ? DEFAULT_EXCLUDE_LABELS : parseList(excludeInput);
+  const excludes = parseList(getInput("exclude-labels"));
   const criteria = parseCriteria(getInput("criteria"));
   const fallbackLabel = getInput("fallback-label").trim() || void 0;
   const dryRun = parseBoolean(getInput("dry-run"), false);
@@ -32215,6 +32220,7 @@ async function run() {
     maxBodyChars,
     allowlist,
     excludes,
+    builtinExcludes: BUILTIN_EXCLUDE_LABELS,
     criteria,
     fallbackLabel,
     skipBots

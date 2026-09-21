@@ -109,8 +109,10 @@ requested"*, which describes a maintainer asking, so it never fires. Override it
 On [Repomix #303](https://github.com/yamadashy/repomix/issues/303) that one entry moved `question` from `0.60`
 to `0.88`.
 
-Exclude labels that record a decision or an event rather than a property of the text: `duplicate`,
-`good first issue`, `needs more information`, `triage`, `released`.
+Labels that record a decision or an event cannot be read off the text. `duplicate`, `invalid`, `wontfix`,
+`good first issue` and `help wanted` are excluded out of the box; add your own, such as `triage` or
+`released`, with `exclude-labels`. To have a built-in exclusion considered anyway, name it in `labels` or
+`criteria`.
 
 ## Inputs
 
@@ -120,7 +122,7 @@ Exclude labels that record a decision or an event rather than a property of the 
 | `github-token` | `${{ github.token }}` | Needs `issues: write`, plus `pull-requests: read` for pull requests. |
 | `threshold` | `0.8` | Apply a label at or above this probability. |
 | `labels` | *(all described labels)* | Allowlist, newline- or comma-separated. |
-| `exclude-labels` | `duplicate`, `invalid`, `wontfix`, `good first issue`, `help wanted` | Labels never to apply. |
+| `exclude-labels` | *(none)* | Labels never to apply, on top of the built-in exclusions. |
 | `criteria` | *(none)* | YAML map of label to a plain-language condition, replacing its description. |
 | `fallback-label` | *(none)* | Applied when nothing clears the threshold. |
 | `skip-bots` | `true` | Skip issues opened by bots. |
@@ -145,7 +147,7 @@ Exclude labels that record a decision or an event rather than a property of the 
       enhancement
       question
 
-    # Or keep every label and leave some out. Replaces the default list.
+    # Or keep every label and leave some out. Added to the built-in exclusions.
     # exclude-labels: |
     #   duplicate
     #   wontfix

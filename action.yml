@@ -32,15 +32,11 @@ inputs:
     default: ''
   exclude-labels:
     description: >-
-      Labels never to apply, separated by newlines or commas. The default set are maintainer
-      decisions rather than properties of the issue text.
+      Labels never to apply, separated by newlines or commas. Added to the built-in exclusions
+      (duplicate, invalid, wontfix, good first issue, help wanted), which are maintainer decisions
+      rather than properties of the text. To have one of those considered, name it in labels or criteria.
     required: false
-    default: |
-      duplicate
-      invalid
-      wontfix
-      good first issue
-      help wanted
+    default: ''
   criteria:
     description: >-
       Optional YAML mapping of label name to a plain-language condition, overriding or adding to the

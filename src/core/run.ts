@@ -16,6 +16,7 @@ export interface LabelRunConfig {
   maxBodyChars: number;
   allowlist?: string[];
   excludes?: string[];
+  builtinExcludes?: string[];
   criteria?: Record<string, string>;
   fallbackLabel?: string;
   endpoint?: string;
@@ -64,6 +65,7 @@ export async function labelSubject(
     subject,
     allowlist: config.allowlist,
     excludes: config.excludes,
+    builtinExcludes: config.builtinExcludes,
     criteria: config.criteria,
   });
 

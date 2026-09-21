@@ -7,7 +7,7 @@ import { parse as parseYaml } from 'yaml';
  * and so the same rules apply to the smoke script.
  */
 
-export const DEFAULT_EXCLUDE_LABELS = ['duplicate', 'invalid', 'wontfix', 'good first issue', 'help wanted'];
+export const BUILTIN_EXCLUDE_LABELS = ['duplicate', 'invalid', 'wontfix', 'good first issue', 'help wanted'];
 
 export const DEFAULT_THRESHOLD = 0.8;
 export const DEFAULT_MAX_BODY_CHARS = 6000;

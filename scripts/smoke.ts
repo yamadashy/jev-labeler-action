@@ -15,7 +15,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
-import { DEFAULT_EXCLUDE_LABELS, parseCriteria } from '../src/core/inputs.js';
+import { BUILTIN_EXCLUDE_LABELS, parseCriteria } from '../src/core/inputs.js';
 import { MAX_FILES, withPatches } from '../src/core/labeling.js';
 import { labelSubject } from '../src/core/run.js';
 import type { ChangedFile, LabelSubject, RepoLabel } from '../src/core/types.js';
@@ -104,7 +104,7 @@ const result = await labelSubject(subject, labels, {
   model: values.model ?? DEFAULT_MODEL,
   threshold,
   maxBodyChars: 6000,
-  excludes: DEFAULT_EXCLUDE_LABELS,
+  builtinExcludes: BUILTIN_EXCLUDE_LABELS,
   criteria: values.criteria ? parseCriteria(readFileSync(values.criteria, 'utf8')) : undefined,
 });
 
