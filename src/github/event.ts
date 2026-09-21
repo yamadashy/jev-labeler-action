@@ -12,47 +12,61 @@ export type ActionContext = typeof context;
 /**
  * Reading the subject out of the event payload.
  *
- * The issue title and body are read here, from the payload the runner already
- * wrote to disk, and never through a shell. That is the difference between text
- * an attacker controls being *data* and it being *code*: see the security
- * section of the README.
+ * The title and body are read here, from the payload the runner already wrote to
+ * disk, and never through a shell. That is the difference between text an
+ * attacker controls being *data* and it being *code*: see the security section
+ * of the README. Nothing in this file touches a pull request's branch or code.
  */
 
-export const SUPPORTED_EVENT = 'issues';
-export const SUPPORTED_ACTIONS = ['opened', 'edited', 'reopened'];
+export const SUPPORTED_EVENTS = ['issues', 'pull_request', 'pull_request_target'];
 
 export class UnsupportedEventError extends Error {}
 
 export function subjectFromContext(context: ActionContext): LabelSubject {
-  if (context.eventName !== SUPPORTED_EVENT) {
+  if (!SUPPORTED_EVENTS.includes(context.eventName)) {
     throw new UnsupportedEventError(
-      `This action only handles \`${SUPPORTED_EVENT}\` events, but the workflow was triggered by \`${context.eventName}\`. ` +
-        `Trigger it with \`on: issues\` (types: ${SUPPORTED_ACTIONS.join(', ')}).`,
+      `This action handles ${SUPPORTED_EVENTS.map((name) => `\`${name}\``).join(', ')} events, ` +
+        `but the workflow was triggered by \`${context.eventName}\`.`,
     );
   }
 
-  const issue = context.payload.issue;
-  if (!issue) {
-    throw new UnsupportedEventError('The `issues` event payload did not contain an issue.');
+  if (context.eventName === 'issues') {
+    const issue = context.payload.issue;
+    if (!issue) {
+      throw new UnsupportedEventError('The `issues` event payload did not contain an issue.');
+    }
+    // An `issues` event never fires for a pull request, but the payloads share a
+    // shape, so a mixed-up workflow would otherwise silently label the wrong thing.
+    if (issue.pull_request) {
+      throw new UnsupportedEventError(
+        'This `issues` payload describes a pull request. Trigger pull request labelling with `on: pull_request_target`.',
+      );
+    }
+    return subjectFrom('issue', issue);
   }
 
-  // `pull_request` on an issue payload means the issue is really a PR. Pull
-  // requests are out of scope for now; the core would handle them unchanged.
-  if (issue.pull_request) {
-    throw new UnsupportedEventError('This action does not label pull requests yet.');
+  const pull = context.payload.pull_request;
+  if (!pull) {
+    throw new UnsupportedEventError(`The \`${context.eventName}\` event payload did not contain a pull request.`);
   }
+  return subjectFrom('pull_request', pull);
+}
 
-  const user = issue.user as { login?: string; type?: string } | undefined;
+type Payload = Record<string, unknown>;
+
+/** Issues and pull requests carry the same fields under the same names here. */
+function subjectFrom(kind: LabelSubject['kind'], payload: Payload): LabelSubject {
+  const user = payload.user as { login?: string; type?: string } | undefined;
   const login = typeof user?.login === 'string' ? user.login : '';
 
   return {
-    kind: 'issue',
-    number: issue.number as number,
-    title: typeof issue.title === 'string' ? issue.title : '',
-    body: typeof issue.body === 'string' ? issue.body : '',
+    kind,
+    number: payload.number as number,
+    title: typeof payload.title === 'string' ? payload.title : '',
+    body: typeof payload.body === 'string' ? payload.body : '',
     author: { login, isBot: isBotLogin(login, user?.type) },
-    labels: Array.isArray(issue.labels)
-      ? issue.labels
+    labels: Array.isArray(payload.labels)
+      ? payload.labels
           .map((label: unknown) => (typeof label === 'string' ? label : (label as { name?: string })?.name))
           .filter((name: unknown): name is string => typeof name === 'string')
       : [],

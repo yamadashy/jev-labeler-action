@@ -2,21 +2,23 @@
  * Local smoke test. Not part of the action.
  *
  * Runs the real labelling core against a real repository's labels and a real
- * issue, and prints the probability table. Useful for picking a threshold before
- * pointing a workflow at anything.
+ * issue or pull request, and prints the probability table. Useful for picking a
+ * threshold before pointing a workflow at anything.
  *
  *   export TYPESAFE_API_KEY=...
  *   npm run smoke -- --repo yamadashy/repomix --issue 1878
+ *   npm run smoke -- --repo yamadashy/repomix --pr 1871
  *
- * Labels and the issue are fetched with the `gh` CLI, so it uses whatever
- * credentials `gh` already has.
+ * Everything on the GitHub side is fetched with the `gh` CLI, so it uses
+ * whatever credentials `gh` already has.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { DEFAULT_EXCLUDE_LABELS, parseCriteria } from '../src/core/inputs.js';
+import { MAX_FILES, withPatches } from '../src/core/labeling.js';
 import { labelSubject } from '../src/core/run.js';
-import type { LabelSubject, RepoLabel } from '../src/core/types.js';
+import type { ChangedFile, LabelSubject, RepoLabel } from '../src/core/types.js';
 import { isBotLogin } from '../src/github/event.js';
 import { DEFAULT_MODEL } from '../src/jev/client.js';
 
@@ -24,17 +26,20 @@ const { values } = parseArgs({
   options: {
     repo: { type: 'string' },
     issue: { type: 'string' },
+    pr: { type: 'string' },
     threshold: { type: 'string', default: '0.8' },
     model: { type: 'string', default: DEFAULT_MODEL },
     criteria: { type: 'string' },
+    'max-diff-chars': { type: 'string', default: '0' },
   },
 });
 
 const repo = values.repo;
-const issueNumber = values.issue;
-if (!repo || !issueNumber) {
+const number = values.issue ?? values.pr;
+const kind = values.pr ? 'pull_request' : 'issue';
+if (!repo || !number || (values.issue && values.pr)) {
   console.error(
-    'Usage: npm run smoke -- --repo <owner/name> --issue <number> [--threshold 0.8] [--criteria criteria.yml]',
+    'Usage: npm run smoke -- --repo <owner/name> (--issue <number> | --pr <number>) [--threshold 0.8] [--criteria criteria.yml]',
   );
   process.exit(2);
 }
@@ -52,9 +57,8 @@ const repoLabels = JSON.parse(gh(['label', 'list', '-R', repo, '--limit', '200',
   description: string;
 }[];
 
-const issue = JSON.parse(
-  gh(['issue', 'view', issueNumber, '-R', repo, '--json', 'number,title,body,labels,author']),
-) as {
+const subcommand = kind === 'pull_request' ? 'pr' : 'issue';
+const item = JSON.parse(gh([subcommand, 'view', number, '-R', repo, '--json', 'number,title,body,labels,author'])) as {
   number: number;
   title: string;
   body: string;
@@ -62,20 +66,35 @@ const issue = JSON.parse(
   author?: { login?: string };
 };
 
+const maxDiffChars = Number(values['max-diff-chars']);
+
+function changedFiles(): ChangedFile[] {
+  const files = JSON.parse(gh(['api', `repos/${repo}/pulls/${number}/files`, '--paginate'])) as {
+    filename: string;
+    status: string;
+    patch?: string;
+  }[];
+  const capped = files
+    .slice(0, MAX_FILES + 1)
+    .map((file) => ({ path: file.filename, status: file.status, patch: file.patch }));
+  return withPatches(capped, maxDiffChars);
+}
+
 const labels: RepoLabel[] = repoLabels.map((label) => ({
   name: label.name,
   description: label.description === '' ? null : label.description,
 }));
 
-// Deliberately pretends the issue is unlabelled: the point of the smoke test is
-// to see what the model would have said on a brand-new issue.
+// Deliberately pretends it is unlabelled: the point of the smoke test is to see
+// what the model would have said on a brand-new issue or pull request.
 const subject: LabelSubject = {
-  kind: 'issue',
-  number: issue.number,
-  title: issue.title,
-  body: issue.body ?? '',
+  kind,
+  number: item.number,
+  title: item.title,
+  body: item.body ?? '',
   labels: [],
-  author: { login: issue.author?.login ?? '', isBot: isBotLogin(issue.author?.login ?? '') },
+  author: { login: item.author?.login ?? '', isBot: isBotLogin(item.author?.login ?? '') },
+  ...(kind === 'pull_request' ? { files: changedFiles() } : {}),
 };
 
 const threshold = Number(values.threshold);
@@ -89,8 +108,9 @@ const result = await labelSubject(subject, labels, {
   criteria: values.criteria ? parseCriteria(readFileSync(values.criteria, 'utf8')) : undefined,
 });
 
-console.log(`\n${repo}#${issue.number}: ${issue.title}`);
-console.log(`actual labels: ${issue.labels.map((label) => label.name).join(', ') || '(none)'}`);
+console.log(`\n${repo}#${item.number} (${kind}): ${item.title}`);
+if (subject.files) console.log(`changed files: ${subject.files.length}`);
+console.log(`actual labels: ${item.labels.map((label) => label.name).join(', ') || '(none)'}`);
 console.log(
   `model ${result.model} · ${result.ms} ms · ${result.usage.input_tokens} input tokens · threshold ${threshold}\n`,
 );

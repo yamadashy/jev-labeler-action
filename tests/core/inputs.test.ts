@@ -5,6 +5,7 @@ import {
   parseCriteria,
   parseList,
   parseMaxBodyChars,
+  parseMaxDiffChars,
   parseThreshold,
 } from '../../src/core/inputs.js';
 
@@ -82,6 +83,22 @@ describe('parseMaxBodyChars', () => {
   it('rejects zero and fractions', () => {
     expect(() => parseMaxBodyChars('0')).toThrow();
     expect(() => parseMaxBodyChars('1.5')).toThrow();
+  });
+});
+
+describe('parseMaxDiffChars', () => {
+  it('defaults to sending no diff at all', () => {
+    expect(parseMaxDiffChars('')).toBe(0);
+    expect(parseMaxDiffChars(undefined)).toBe(0);
+  });
+
+  it('accepts an explicit budget', () => {
+    expect(parseMaxDiffChars('4000')).toBe(4000);
+  });
+
+  it('rejects a negative or fractional budget', () => {
+    expect(() => parseMaxDiffChars('-1')).toThrow();
+    expect(() => parseMaxDiffChars('1.5')).toThrow();
   });
 });
 

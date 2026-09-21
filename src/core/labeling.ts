@@ -1,6 +1,6 @@
 import type { Answer, NoulQuestion, State } from '../jev/client.js';
 import { canonical } from './inputs.js';
-import type { LabelSubject, RepoLabel, ResultRow } from './types.js';
+import type { ChangedFile, LabelSubject, RepoLabel, ResultRow, SubjectKind } from './types.js';
 
 /**
  * The labelling core.
@@ -11,18 +11,25 @@ import type { LabelSubject, RepoLabel, ResultRow } from './types.js';
  * below testable without a GitHub event.
  */
 
+/** How each kind of subject is named to Jev. */
+const SUBJECT_NOUN: Record<SubjectKind, string> = {
+  issue: 'GitHub issue',
+  pull_request: 'GitHub pull request',
+};
+
 /**
  * The zero-config question wording.
  *
- * This exact sentence is the one measured in the backtest over Repomix's issue
+ * The issue sentence is the one measured in the backtest over Repomix's issue
  * history, so the accuracy and threshold advice in the README describes what the
- * action actually sends. Reword it and those numbers stop being true.
+ * action actually sends. Reword it and those numbers stop being true. The pull
+ * request sentence differs only in the noun, and was measured the same way.
  *
  * Deliberately free of digits: digits inside `instructions` measurably pull Jev's
  * probabilities around, and this question has no reason to contain any.
  */
-export function zeroConfigInstructions(label: string, description: string): string {
-  return `A maintainer triaging this GitHub issue would put the label "${label}" on it. The repository describes that label as: "${description}".`;
+export function zeroConfigInstructions(label: string, description: string, kind: SubjectKind = 'issue'): string {
+  return `A maintainer triaging this ${SUBJECT_NOUN[kind]} would put the label "${label}" on it. The repository describes that label as: "${description}".`;
 }
 
 export interface PlanOptions {
@@ -108,7 +115,7 @@ export function buildPlan(options: PlanOptions): EvaluationPlan {
     // label means, and wrapping it in boilerplate only dilutes it.
     questions[id] = {
       type: 'noul',
-      instructions: override ? override : zeroConfigInstructions(repoLabel.name, condition),
+      instructions: override ? override : zeroConfigInstructions(repoLabel.name, condition, subject.kind),
     };
     idToLabel[id] = repoLabel.name;
     planned.push({ id, label: repoLabel.name, condition });
@@ -117,21 +124,61 @@ export function buildPlan(options: PlanOptions): EvaluationPlan {
   return { questions, idToLabel, planned, skipped };
 }
 
+/** How many changed files a pull request's state carries before it is cut short. */
+export const MAX_FILES = 100;
+
 /**
  * The state handed to Jev.
  *
  * An object rather than one concatenated string, so the title cannot be mistaken
- * for the first line of the body, and so a pull request can add fields later.
+ * for the first line of the body. A pull request adds its changed-file list; an
+ * issue's state is unchanged from the backtested shape, down to the field order.
  */
 export function buildState(subject: LabelSubject, maxBodyChars: number): State {
-  return {
+  const state: Record<string, unknown> = {
     kind: subject.kind,
     title: subject.title,
     body: truncate(subject.body, maxBodyChars),
   };
+  if (subject.kind === 'pull_request') {
+    state.files = buildFileState(subject.files ?? []);
+  }
+  return state;
 }
 
-/** Cut an over-long body at the limit. The marker is digit-free on purpose. */
+/**
+ * The changed-file list as Jev sees it.
+ *
+ * Capped, because a pull request touching a thousand generated files would bury
+ * the handful that say what it is. The marker entry is digit-free like every
+ * other piece of text the action writes.
+ */
+export function buildFileState(files: ChangedFile[], maxFiles: number = MAX_FILES): ChangedFile[] {
+  const shown = files.slice(0, maxFiles);
+  if (files.length > maxFiles) shown.push({ path: '[truncated]', status: 'more files not shown' });
+  return shown;
+}
+
+/**
+ * Attach patches to a changed-file list within one budget for the whole pull
+ * request, spent in the order the files came back.
+ *
+ * A per-file budget would let a wide pull request multiply it out; one budget is
+ * the number a user can reason about.
+ */
+export function withPatches(files: (ChangedFile & { patch?: string })[], maxDiffChars: number): ChangedFile[] {
+  if (maxDiffChars <= 0) return files.map(({ path, status }) => ({ path, status }));
+
+  let remaining = maxDiffChars;
+  return files.map(({ path, status, patch }) => {
+    if (!patch || remaining <= 0) return { path, status };
+    const slice = truncate(patch, remaining);
+    remaining -= Math.min(patch.length, remaining);
+    return { path, status, patch: slice };
+  });
+}
+
+/** Cut an over-long text at the limit. The marker is digit-free on purpose. */
 export function truncate(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
   return `${text.slice(0, maxChars)}\n\n[truncated]`;

@@ -1,5 +1,5 @@
 name: Jev Labeler
-description: Zero-config AI issue labeling with TypeSafe's Jev. One yes/no question per label, no generated text.
+description: Zero-config AI labeling for issues and pull requests with TypeSafe's Jev. One yes/no question per label, no generated text.
 author: Kazuki Yamada
 
 branding:
@@ -11,7 +11,7 @@ inputs:
     description: TypeSafe API key. Store it as a repository secret and pass that secret here.
     required: true
   github-token:
-    description: "Token used to read the repository's labels and add labels to the issue. Needs the issues write permission."
+    description: "Token used to read labels and apply them. Needs the issues write permission, plus pull-requests read to label a pull request."
     required: true
     default: ${{ github.token }}
   model:
@@ -53,18 +53,24 @@ inputs:
     default: ''
   skip-bots:
     description: >-
-      Leave issues opened by an app (a login ending in `[bot]`) alone. Bot-authored issues are template
-      text rather than reports — a Renovate configuration warning reads exactly like a bug report.
+      Leave issues and pull requests opened by an app (a login ending in `[bot]`) alone. Bot-authored
+      work is template text rather than a report — a Renovate warning reads exactly like a bug report.
     required: false
     default: 'true'
   dry-run:
-    description: Evaluate and write the job summary, but do not touch the issue.
+    description: Evaluate and write the job summary, but apply nothing.
     required: false
     default: 'false'
   max-body-chars:
-    description: Issue bodies longer than this are truncated before being sent to Jev.
+    description: Bodies longer than this are truncated before being sent to Jev.
     required: false
     default: '6000'
+  max-diff-chars:
+    description: >-
+      Pull requests only. Characters of diff to send alongside the changed-file list, budgeted across
+      the whole pull request. Zero, the default, sends paths and statuses only, which measured best.
+    required: false
+    default: '0'
 
 outputs:
   labels:

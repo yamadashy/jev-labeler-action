@@ -77,6 +77,19 @@ export function parseMaxBodyChars(raw: string | undefined): number {
   return value;
 }
 
+/**
+ * The per-pull-request budget for diff text, in characters. Zero means send the
+ * file list without patches, which is the measured default.
+ */
+export function parseMaxDiffChars(raw: string | undefined): number {
+  if (!raw || raw.trim() === '') return 0;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`\`max-diff-chars\` must be a whole number, zero or more, got "${raw}".`);
+  }
+  return value;
+}
+
 export function parseBoolean(raw: string | undefined, fallback = false): boolean {
   if (raw === undefined || raw.trim() === '') return fallback;
   const value = raw.trim().toLowerCase();

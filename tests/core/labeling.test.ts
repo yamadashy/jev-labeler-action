@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { buildPlan, buildState, decide, truncate, zeroConfigInstructions } from '../../src/core/labeling.js';
-import type { LabelSubject, RepoLabel } from '../../src/core/types.js';
+import {
+  buildFileState,
+  buildPlan,
+  buildState,
+  decide,
+  truncate,
+  withPatches,
+  zeroConfigInstructions,
+} from '../../src/core/labeling.js';
+import type { ChangedFile, LabelSubject, RepoLabel } from '../../src/core/types.js';
 
 const repoLabels: RepoLabel[] = [
   { name: 'bug', description: "Something isn't working" },
@@ -130,6 +138,102 @@ describe('buildState', () => {
   it('truncates an over-long body', () => {
     const state = buildState(subject({ body: 'x'.repeat(50) }), 10) as { body: string };
     expect(state.body).toBe(`${'x'.repeat(10)}\n\n[truncated]`);
+  });
+});
+
+describe('pull request state', () => {
+  const pull = (files: ChangedFile[] = []): LabelSubject => subject({ kind: 'pull_request', files });
+
+  it('carries the changed-file list alongside the title and body', () => {
+    const state = buildState(pull([{ path: 'src/cli.ts', status: 'modified' }]), 100);
+    expect(state).toEqual({
+      kind: 'pull_request',
+      title: 'The CLI crashes on a brace glob',
+      body: 'Steps to reproduce follow.',
+      files: [{ path: 'src/cli.ts', status: 'modified' }],
+    });
+  });
+
+  it('leaves an issue state byte-identical to the backtested shape', () => {
+    // The issue numbers in the README were measured against exactly this state.
+    expect(JSON.stringify(buildState(subject(), 6000))).toBe(
+      '{"kind":"issue","title":"The CLI crashes on a brace glob","body":"Steps to reproduce follow."}',
+    );
+  });
+
+  it('never gives an issue a files field, even if one is set', () => {
+    expect(buildState(subject({ files: [{ path: 'x', status: 'added' }] }), 100)).not.toHaveProperty('files');
+  });
+
+  it('says "pull request" in the zero-config wording, and nothing else changes', () => {
+    expect(zeroConfigInstructions('bug', 'broken', 'pull_request')).toBe(
+      zeroConfigInstructions('bug', 'broken', 'issue').replace('GitHub issue', 'GitHub pull request'),
+    );
+  });
+
+  it('keeps the issue wording as the default, so old call sites cannot drift', () => {
+    expect(zeroConfigInstructions('bug', 'broken')).toContain('this GitHub issue would');
+  });
+
+  it('builds pull request questions with the pull request noun', () => {
+    const plan = buildPlan({ repoLabels: [repoLabels[0]], subject: pull() });
+    expect(plan.questions.l0.instructions).toContain('GitHub pull request');
+  });
+});
+
+describe('buildFileState', () => {
+  const files = (count: number): ChangedFile[] =>
+    Array.from({ length: count }, (_, index) => ({ path: `src/f${index}.ts`, status: 'modified' }));
+
+  it('passes a short list through untouched', () => {
+    expect(buildFileState(files(3), 10)).toEqual(files(3));
+  });
+
+  it('cuts a long list short and says so without a digit', () => {
+    const state = buildFileState(files(5), 3);
+    expect(state).toHaveLength(4);
+    expect(state.slice(0, 3)).toEqual(files(3));
+    expect(state[3]).toEqual({ path: '[truncated]', status: 'more files not shown' });
+    expect(JSON.stringify(state[3])).not.toMatch(/\d/);
+  });
+
+  it('does not mark a list that exactly fills the cap', () => {
+    expect(buildFileState(files(3), 3)).toEqual(files(3));
+  });
+});
+
+describe('withPatches', () => {
+  const files = [
+    { path: 'a.ts', status: 'modified', patch: 'aaaa' },
+    { path: 'b.ts', status: 'modified', patch: 'bbbb' },
+  ];
+
+  it('drops every patch when the budget is zero', () => {
+    expect(withPatches(files, 0)).toEqual([
+      { path: 'a.ts', status: 'modified' },
+      { path: 'b.ts', status: 'modified' },
+    ]);
+  });
+
+  it('keeps patches that fit', () => {
+    expect(withPatches(files, 100)).toEqual(files);
+  });
+
+  it('spends one budget across the pull request, in order', () => {
+    // Six characters: all of `aaaa`, then two of `bbbb`.
+    const result = withPatches(files, 6);
+    expect(result[0].patch).toBe('aaaa');
+    expect(result[1].patch).toBe('bb\n\n[truncated]');
+  });
+
+  it('leaves later files bare once the budget is gone', () => {
+    const result = withPatches(files, 4);
+    expect(result[0].patch).toBe('aaaa');
+    expect(result[1]).toEqual({ path: 'b.ts', status: 'modified' });
+  });
+
+  it('copes with a file the API gave no patch for', () => {
+    expect(withPatches([{ path: 'logo.png', status: 'added' }], 100)).toEqual([{ path: 'logo.png', status: 'added' }]);
   });
 });
 

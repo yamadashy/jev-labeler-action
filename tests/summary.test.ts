@@ -66,6 +66,12 @@ describe('renderSummary', () => {
     expect(markdown).not.toContain('| Label |');
   });
 
+  it('calls a pull request a pull request', () => {
+    const markdown = renderSummary(result, { ...subject, kind: 'pull_request' }, 0.8, false);
+    expect(markdown).toContain('Pull request #3');
+    expect(markdown).not.toContain('Issue #3');
+  });
+
   it('escapes a pipe in a label or title so the table survives', () => {
     const markdown = renderSummary(
       { ...result, rows: [{ label: 'a|b', probability: 0.5, status: 'below-threshold' }] },

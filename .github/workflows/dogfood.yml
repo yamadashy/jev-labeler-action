@@ -1,9 +1,12 @@
-# Runs the action from this very repository on its own issues, so every change
-# on main is exercised end to end, including the write path, before a tag moves.
+# Runs the action from this very repository on its own issues and pull requests,
+# so every change on main is exercised end to end, including the write path,
+# before a tag moves.
 name: Dogfood
 
 on:
   issues:
+    types: [opened]
+  pull_request_target:
     types: [opened]
 
 permissions: {}
@@ -14,7 +17,11 @@ jobs:
     permissions:
       contents: read
       issues: write
+      pull-requests: read
     steps:
+      # `pull_request_target` checks out this repository's default branch, never
+      # the pull request. The action reads the payload and the API, and runs no
+      # code from the pull request — adding a step that does would be the bug.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false

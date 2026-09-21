@@ -31771,6 +31771,14 @@ function parseMaxBodyChars(raw) {
   }
   return value;
 }
+function parseMaxDiffChars(raw) {
+  if (!raw || raw.trim() === "") return 0;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`\`max-diff-chars\` must be a whole number, zero or more, got "${raw}".`);
+  }
+  return value;
+}
 function parseBoolean(raw, fallback = false) {
   if (raw === void 0 || raw.trim() === "") return fallback;
   const value = raw.trim().toLowerCase();
@@ -31780,6 +31788,122 @@ function parseBoolean(raw, fallback = false) {
 }
 function canonical(label) {
   return label.trim().toLowerCase();
+}
+
+// src/core/labeling.ts
+var SUBJECT_NOUN = {
+  issue: "GitHub issue",
+  pull_request: "GitHub pull request"
+};
+function zeroConfigInstructions(label, description, kind = "issue") {
+  return `A maintainer triaging this ${SUBJECT_NOUN[kind]} would put the label "${label}" on it. The repository describes that label as: "${description}".`;
+}
+function buildPlan(options) {
+  const { repoLabels, subject } = options;
+  const criteria = options.criteria ?? {};
+  const allowlist = new Set((options.allowlist ?? []).map(canonical));
+  const excludes = new Set((options.excludes ?? []).map(canonical));
+  const present = new Set(subject.labels.map(canonical));
+  const criteriaByCanonical = new Map(
+    Object.entries(criteria).map(([label, condition]) => [canonical(label), condition])
+  );
+  const questions = {};
+  const idToLabel = {};
+  const planned = [];
+  const skipped = [];
+  let index = 0;
+  for (const repoLabel of repoLabels) {
+    const key = canonical(repoLabel.name);
+    const override = criteriaByCanonical.get(key);
+    if (present.has(key)) {
+      skipped.push({ label: repoLabel.name, probability: null, status: "already-present" });
+      continue;
+    }
+    if (excludes.has(key)) {
+      skipped.push({ label: repoLabel.name, probability: null, status: "excluded" });
+      continue;
+    }
+    if (allowlist.size > 0 && !allowlist.has(key) && override === void 0) {
+      skipped.push({ label: repoLabel.name, probability: null, status: "not-allowlisted" });
+      continue;
+    }
+    const condition = override ?? repoLabel.description?.trim();
+    if (!condition) {
+      skipped.push({ label: repoLabel.name, probability: null, status: "no-condition" });
+      continue;
+    }
+    const id = `l${index++}`;
+    questions[id] = {
+      type: "noul",
+      instructions: override ? override : zeroConfigInstructions(repoLabel.name, condition, subject.kind)
+    };
+    idToLabel[id] = repoLabel.name;
+    planned.push({ id, label: repoLabel.name, condition });
+  }
+  return { questions, idToLabel, planned, skipped };
+}
+var MAX_FILES = 100;
+function buildState(subject, maxBodyChars) {
+  const state = {
+    kind: subject.kind,
+    title: subject.title,
+    body: truncate(subject.body, maxBodyChars)
+  };
+  if (subject.kind === "pull_request") {
+    state.files = buildFileState(subject.files ?? []);
+  }
+  return state;
+}
+function buildFileState(files, maxFiles = MAX_FILES) {
+  const shown = files.slice(0, maxFiles);
+  if (files.length > maxFiles) shown.push({ path: "[truncated]", status: "more files not shown" });
+  return shown;
+}
+function withPatches(files, maxDiffChars) {
+  if (maxDiffChars <= 0) return files.map(({ path, status }) => ({ path, status }));
+  let remaining = maxDiffChars;
+  return files.map(({ path, status, patch }) => {
+    if (!patch || remaining <= 0) return { path, status };
+    const slice = truncate(patch, remaining);
+    remaining -= Math.min(patch.length, remaining);
+    return { path, status, patch: slice };
+  });
+}
+function truncate(text, maxChars) {
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars)}
+
+[truncated]`;
+}
+function decide(options) {
+  const { plan, answers, threshold, subject } = options;
+  const present = new Set(subject.labels.map(canonical));
+  const applied = [];
+  const probabilities = {};
+  const rows = [];
+  for (const { id, label } of plan.planned) {
+    const answer = answers[id];
+    if (answer?.type !== "noul") {
+      rows.push({ label, probability: null, status: "no-answer" });
+      continue;
+    }
+    probabilities[label] = answer.noul;
+    const passes = answer.noul >= threshold;
+    if (passes) applied.push(label);
+    rows.push({ label, probability: answer.noul, status: passes ? "applied" : "below-threshold" });
+  }
+  const allRows = [...rows, ...plan.skipped];
+  const fallback = options.fallbackLabel?.trim();
+  if (fallback && applied.length === 0 && !present.has(canonical(fallback))) {
+    applied.push(fallback);
+    const existing = allRows.find((row) => canonical(row.label) === canonical(fallback));
+    if (existing) {
+      existing.status = "applied-as-fallback";
+    } else {
+      allRows.push({ label: fallback, probability: null, status: "applied-as-fallback" });
+    }
+  }
+  return { applied, probabilities, rows: allRows };
 }
 
 // src/jev/client.ts
@@ -31868,98 +31992,6 @@ function describe(status, detail) {
   }
 }
 
-// src/core/labeling.ts
-function zeroConfigInstructions(label, description) {
-  return `A maintainer triaging this GitHub issue would put the label "${label}" on it. The repository describes that label as: "${description}".`;
-}
-function buildPlan(options) {
-  const { repoLabels, subject } = options;
-  const criteria = options.criteria ?? {};
-  const allowlist = new Set((options.allowlist ?? []).map(canonical));
-  const excludes = new Set((options.excludes ?? []).map(canonical));
-  const present = new Set(subject.labels.map(canonical));
-  const criteriaByCanonical = new Map(
-    Object.entries(criteria).map(([label, condition]) => [canonical(label), condition])
-  );
-  const questions = {};
-  const idToLabel = {};
-  const planned = [];
-  const skipped = [];
-  let index = 0;
-  for (const repoLabel of repoLabels) {
-    const key = canonical(repoLabel.name);
-    const override = criteriaByCanonical.get(key);
-    if (present.has(key)) {
-      skipped.push({ label: repoLabel.name, probability: null, status: "already-present" });
-      continue;
-    }
-    if (excludes.has(key)) {
-      skipped.push({ label: repoLabel.name, probability: null, status: "excluded" });
-      continue;
-    }
-    if (allowlist.size > 0 && !allowlist.has(key) && override === void 0) {
-      skipped.push({ label: repoLabel.name, probability: null, status: "not-allowlisted" });
-      continue;
-    }
-    const condition = override ?? repoLabel.description?.trim();
-    if (!condition) {
-      skipped.push({ label: repoLabel.name, probability: null, status: "no-condition" });
-      continue;
-    }
-    const id = `l${index++}`;
-    questions[id] = {
-      type: "noul",
-      instructions: override ? override : zeroConfigInstructions(repoLabel.name, condition)
-    };
-    idToLabel[id] = repoLabel.name;
-    planned.push({ id, label: repoLabel.name, condition });
-  }
-  return { questions, idToLabel, planned, skipped };
-}
-function buildState(subject, maxBodyChars) {
-  return {
-    kind: subject.kind,
-    title: subject.title,
-    body: truncate(subject.body, maxBodyChars)
-  };
-}
-function truncate(text, maxChars) {
-  if (text.length <= maxChars) return text;
-  return `${text.slice(0, maxChars)}
-
-[truncated]`;
-}
-function decide(options) {
-  const { plan, answers, threshold, subject } = options;
-  const present = new Set(subject.labels.map(canonical));
-  const applied = [];
-  const probabilities = {};
-  const rows = [];
-  for (const { id, label } of plan.planned) {
-    const answer = answers[id];
-    if (answer?.type !== "noul") {
-      rows.push({ label, probability: null, status: "no-answer" });
-      continue;
-    }
-    probabilities[label] = answer.noul;
-    const passes = answer.noul >= threshold;
-    if (passes) applied.push(label);
-    rows.push({ label, probability: answer.noul, status: passes ? "applied" : "below-threshold" });
-  }
-  const allRows = [...rows, ...plan.skipped];
-  const fallback = options.fallbackLabel?.trim();
-  if (fallback && applied.length === 0 && !present.has(canonical(fallback))) {
-    applied.push(fallback);
-    const existing = allRows.find((row) => canonical(row.label) === canonical(fallback));
-    if (existing) {
-      existing.status = "applied-as-fallback";
-    } else {
-      allRows.push({ label: fallback, probability: null, status: "applied-as-fallback" });
-    }
-  }
-  return { applied, probabilities, rows: allRows };
-}
-
 // src/core/run.ts
 async function labelSubject(subject, repoLabels, config, askFn = ask) {
   if (config.skipBots !== false && subject.author.isBot) {
@@ -32021,32 +32053,43 @@ async function labelSubject(subject, repoLabels, config, askFn = ask) {
 }
 
 // src/github/event.ts
-var SUPPORTED_EVENT = "issues";
-var SUPPORTED_ACTIONS = ["opened", "edited", "reopened"];
+var SUPPORTED_EVENTS = ["issues", "pull_request", "pull_request_target"];
 var UnsupportedEventError = class extends Error {
 };
 function subjectFromContext(context3) {
-  if (context3.eventName !== SUPPORTED_EVENT) {
+  if (!SUPPORTED_EVENTS.includes(context3.eventName)) {
     throw new UnsupportedEventError(
-      `This action only handles \`${SUPPORTED_EVENT}\` events, but the workflow was triggered by \`${context3.eventName}\`. Trigger it with \`on: issues\` (types: ${SUPPORTED_ACTIONS.join(", ")}).`
+      `This action handles ${SUPPORTED_EVENTS.map((name) => `\`${name}\``).join(", ")} events, but the workflow was triggered by \`${context3.eventName}\`.`
     );
   }
-  const issue2 = context3.payload.issue;
-  if (!issue2) {
-    throw new UnsupportedEventError("The `issues` event payload did not contain an issue.");
+  if (context3.eventName === "issues") {
+    const issue2 = context3.payload.issue;
+    if (!issue2) {
+      throw new UnsupportedEventError("The `issues` event payload did not contain an issue.");
+    }
+    if (issue2.pull_request) {
+      throw new UnsupportedEventError(
+        "This `issues` payload describes a pull request. Trigger pull request labelling with `on: pull_request_target`."
+      );
+    }
+    return subjectFrom("issue", issue2);
   }
-  if (issue2.pull_request) {
-    throw new UnsupportedEventError("This action does not label pull requests yet.");
+  const pull = context3.payload.pull_request;
+  if (!pull) {
+    throw new UnsupportedEventError(`The \`${context3.eventName}\` event payload did not contain a pull request.`);
   }
-  const user = issue2.user;
+  return subjectFrom("pull_request", pull);
+}
+function subjectFrom(kind, payload) {
+  const user = payload.user;
   const login = typeof user?.login === "string" ? user.login : "";
   return {
-    kind: "issue",
-    number: issue2.number,
-    title: typeof issue2.title === "string" ? issue2.title : "",
-    body: typeof issue2.body === "string" ? issue2.body : "",
+    kind,
+    number: payload.number,
+    title: typeof payload.title === "string" ? payload.title : "",
+    body: typeof payload.body === "string" ? payload.body : "",
     author: { login, isBot: isBotLogin(login, user?.type) },
-    labels: Array.isArray(issue2.labels) ? issue2.labels.map((label) => typeof label === "string" ? label : label?.name).filter((name) => typeof name === "string") : []
+    labels: Array.isArray(payload.labels) ? payload.labels.map((label) => typeof label === "string" ? label : label?.name).filter((name) => typeof name === "string") : []
   };
 }
 function isBotLogin(login, type) {
@@ -32060,6 +32103,24 @@ async function listRepoLabels(octokit, repo) {
     per_page: 100
   });
   return labels.map((label) => ({ name: label.name, description: label.description ?? null }));
+}
+async function listChangedFiles(octokit, repo, pullNumber, maxFiles, withPatch) {
+  const files = [];
+  for await (const page of octokit.paginate.iterator(octokit.rest.pulls.listFiles, {
+    ...repo,
+    pull_number: pullNumber,
+    per_page: 100
+  })) {
+    for (const file of page.data) {
+      files.push({
+        path: file.filename,
+        status: file.status,
+        ...withPatch && file.patch ? { patch: file.patch } : {}
+      });
+    }
+    if (files.length > maxFiles) return files;
+  }
+  return files;
 }
 async function addLabels(octokit, repo, issueNumber, labels) {
   if (labels.length === 0) return;
@@ -32089,11 +32150,12 @@ function renderSummary(result, subject, threshold, dryRun) {
   const lines = [];
   lines.push(`## Jev Labeler${dryRun ? " (dry run)" : ""}`);
   lines.push("");
-  lines.push(`Issue #${subject.number}: ${escapeCell(subject.title)}`);
+  const noun = subject.kind === "pull_request" ? "Pull request" : "Issue";
+  lines.push(`${noun} #${subject.number}: ${escapeCell(subject.title)}`);
   lines.push("");
   if (result.skippedReason === "bot-author") {
     lines.push(
-      `Skipped: the issue was opened by \`${escapeCell(subject.author.login)}\`, which is an app. Bot-authored issues are boilerplate rather than reports, so nothing was evaluated. Set \`skip-bots: false\` to label them anyway.`
+      `Skipped: ${noun.toLowerCase()} #${subject.number} was opened by \`${escapeCell(subject.author.login)}\`, which is an app. Bot-authored work is boilerplate rather than a report, so nothing was evaluated. Set \`skip-bots: false\` to label it anyway.`
     );
     lines.push("");
     return lines.join("\n");
@@ -32134,12 +32196,18 @@ async function run() {
   const fallbackLabel = getInput("fallback-label").trim() || void 0;
   const dryRun = parseBoolean(getInput("dry-run"), false);
   const skipBots = parseBoolean(getInput("skip-bots"), true);
+  const maxDiffChars = parseMaxDiffChars(getInput("max-diff-chars"));
   setSecret(apiKey);
   const subject = subjectFromContext(context2);
   const octokit = getOctokit(token);
   const repo = context2.repo;
   const repoLabels = await listRepoLabels(octokit, repo);
   info(`Repository defines ${repoLabels.length} label(s).`);
+  if (subject.kind === "pull_request" && !(skipBots && subject.author.isBot)) {
+    const files = await listChangedFiles(octokit, repo, subject.number, MAX_FILES, maxDiffChars > 0);
+    subject.files = withPatches(files, maxDiffChars);
+    info(`Pull request changes ${files.length} file(s).`);
+  }
   const result = await labelSubject(subject, repoLabels, {
     apiKey,
     model,
@@ -32152,7 +32220,7 @@ async function run() {
     skipBots
   });
   if (result.skippedReason === "bot-author") {
-    info(`Skipping: issue #${subject.number} was opened by the app ${subject.author.login}.`);
+    info(`Skipping: #${subject.number} was opened by the app ${subject.author.login}.`);
   }
   for (const row of result.rows) {
     if (row.probability !== null) info(`${row.label}: ${row.probability.toFixed(2)} (${row.status})`);

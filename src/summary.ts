@@ -40,14 +40,15 @@ export function renderSummary(
 
   lines.push(`## Jev Labeler${dryRun ? ' (dry run)' : ''}`);
   lines.push('');
-  lines.push(`Issue #${subject.number}: ${escapeCell(subject.title)}`);
+  const noun = subject.kind === 'pull_request' ? 'Pull request' : 'Issue';
+  lines.push(`${noun} #${subject.number}: ${escapeCell(subject.title)}`);
   lines.push('');
 
   if (result.skippedReason === 'bot-author') {
     lines.push(
-      `Skipped: the issue was opened by \`${escapeCell(subject.author.login)}\`, which is an app. ` +
-        'Bot-authored issues are boilerplate rather than reports, so nothing was evaluated. ' +
-        'Set `skip-bots: false` to label them anyway.',
+      `Skipped: ${noun.toLowerCase()} #${subject.number} was opened by \`${escapeCell(subject.author.login)}\`, ` +
+        'which is an app. Bot-authored work is boilerplate rather than a report, so nothing was evaluated. ' +
+        'Set `skip-bots: false` to label it anyway.',
     );
     lines.push('');
     return lines.join('\n');

@@ -6,11 +6,13 @@ import {
   parseCriteria,
   parseList,
   parseMaxBodyChars,
+  parseMaxDiffChars,
   parseThreshold,
 } from './core/inputs.js';
+import { MAX_FILES, withPatches } from './core/labeling.js';
 import { labelSubject } from './core/run.js';
 import { subjectFromContext, UnsupportedEventError } from './github/event.js';
-import { addLabels, listRepoLabels } from './github/labels.js';
+import { addLabels, listChangedFiles, listRepoLabels } from './github/labels.js';
 import { DEFAULT_MODEL } from './jev/client.js';
 import { renderSummary } from './summary.js';
 
@@ -27,6 +29,7 @@ export async function run(): Promise<void> {
   const fallbackLabel = core.getInput('fallback-label').trim() || undefined;
   const dryRun = parseBoolean(core.getInput('dry-run'), false);
   const skipBots = parseBoolean(core.getInput('skip-bots'), true);
+  const maxDiffChars = parseMaxDiffChars(core.getInput('max-diff-chars'));
 
   // Keeps the key out of any log line the action or a dependency might emit.
   core.setSecret(apiKey);
@@ -37,6 +40,15 @@ export async function run(): Promise<void> {
 
   const repoLabels = await listRepoLabels(octokit, repo);
   core.info(`Repository defines ${repoLabels.length} label(s).`);
+
+  // What a pull request changes says more about its label than its prose does,
+  // and the file list comes from the API — this action never checks out the
+  // branch or runs anything from it.
+  if (subject.kind === 'pull_request' && !(skipBots && subject.author.isBot)) {
+    const files = await listChangedFiles(octokit, repo, subject.number, MAX_FILES, maxDiffChars > 0);
+    subject.files = withPatches(files, maxDiffChars);
+    core.info(`Pull request changes ${files.length} file(s).`);
+  }
 
   const result = await labelSubject(subject, repoLabels, {
     apiKey,
@@ -51,7 +63,7 @@ export async function run(): Promise<void> {
   });
 
   if (result.skippedReason === 'bot-author') {
-    core.info(`Skipping: issue #${subject.number} was opened by the app ${subject.author.login}.`);
+    core.info(`Skipping: #${subject.number} was opened by the app ${subject.author.login}.`);
   }
 
   for (const row of result.rows) {
