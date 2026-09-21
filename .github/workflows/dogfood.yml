@@ -1,0 +1,29 @@
+# Runs the action from this very repository, in dry-run, on its own issues.
+#
+# Dry-run on purpose: this repo is where the action gets exercised before a tag
+# goes out, and a run from an unreviewed commit should not be able to change
+# anything. Read the Job Summary to see what it would have done.
+name: Dogfood (dry run)
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    # `workflow_dispatch` has no issue to label; the step would fail by design.
+    if: github.event_name == 'issues'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./
+        with:
+          api-key: ${{ secrets.TYPESAFE_API_KEY }}
+          dry-run: true

@@ -1,0 +1,79 @@
+name: Jev Issue Labeler
+description: Label new issues with TypeSafe's Jev model — one yes/no question per repository label, no generated text.
+author: Kazuki Yamada
+
+branding:
+  icon: tag
+  color: purple
+
+inputs:
+  api-key:
+    description: TypeSafe API key. Store it as a repository secret and pass it as `${{ secrets.TYPESAFE_API_KEY }}`.
+    required: true
+  github-token:
+    description: Token used to read the repository's labels and add labels to the issue. Needs `issues: write`.
+    required: true
+    default: ${{ github.token }}
+  model:
+    description: >-
+      Jev model to ask. Pinned to a version by default rather than `jev-latest`, so that a threshold
+      tuned against one version does not silently shift when the alias moves.
+    required: false
+    default: jev-1.13.0
+  threshold:
+    description: A label is applied when its probability is at or above this value, between zero and one.
+    required: false
+    default: '0.8'
+  labels:
+    description: >-
+      Optional allowlist of labels to consider, separated by newlines or commas.
+      Default: every repository label that has a description.
+    required: false
+    default: ''
+  exclude-labels:
+    description: >-
+      Labels never to apply, separated by newlines or commas. The default set are maintainer
+      decisions rather than properties of the issue text.
+    required: false
+    default: |
+      duplicate
+      invalid
+      wontfix
+      good first issue
+      help wanted
+  criteria:
+    description: >-
+      Optional YAML mapping of label name to a plain-language condition, overriding or adding to the
+      label's GitHub description. A label listed here is considered even if it has no description.
+    required: false
+    default: ''
+  fallback-label:
+    description: Label to apply when no label reaches the threshold. Empty means apply nothing.
+    required: false
+    default: ''
+  skip-bots:
+    description: >-
+      Leave issues opened by an app (a login ending in `[bot]`) alone. Bot-authored issues are template
+      text rather than reports — a Renovate configuration warning reads exactly like a bug report.
+    required: false
+    default: 'true'
+  dry-run:
+    description: Evaluate and write the job summary, but do not touch the issue.
+    required: false
+    default: 'false'
+  max-body-chars:
+    description: Issue bodies longer than this are truncated before being sent to Jev.
+    required: false
+    default: '6000'
+
+outputs:
+  labels:
+    description: JSON array of the labels applied, or that would be applied in a dry run.
+  probabilities:
+    description: JSON object mapping each evaluated label to its probability.
+  model:
+    description: The model version that answered, for example `jev-1.13.0`.
+
+runs:
+  using: node24
+  main: dist/index.cjs

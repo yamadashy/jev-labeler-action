@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-biome:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .tool-versions
+          cache: npm
+      - run: npm ci
+      # `biome check --write` fixes in place, so a non-empty diff means the
+      # committed code was not formatted.
+      - run: node --run lint-biome && git diff --exit-code
+
+  lint-ts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .tool-versions
+          cache: npm
+      - run: npm ci
+      - run: node --run lint-ts
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .tool-versions
+          cache: npm
+      - run: npm ci
+      - run: node --run test -- --reporter=verbose
+
+  dist-up-to-date:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .tool-versions
+          cache: npm
+      - run: npm ci
+      - run: node --run build
+      # `dist/` is what the runner actually executes, so a stale bundle means the
+      # action ships code nobody reviewed. Fail loudly rather than drift.
+      - name: Check that dist/ matches the source
+        run: |
+          if [ -n "$(git status --porcelain dist)" ]; then
+            echo '::error::dist/ is out of date. Run `npm run build` and commit the result.'
+            git diff --stat dist
+            exit 1
+          fi

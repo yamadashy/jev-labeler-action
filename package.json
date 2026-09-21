@@ -1,0 +1,45 @@
+{
+  "name": "jev-labeler-action",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GitHub Action that labels newly opened issues with TypeSafe's Jev model",
+  "author": "Kazuki Yamada <koukun0120@gmail.com>",
+  "license": "MIT",
+  "type": "module",
+  "homepage": "https://github.com/yamadashy/jev-labeler-action",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yamadashy/jev-labeler-action.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yamadashy/jev-labeler-action/issues"
+  },
+  "keywords": ["actions", "github-actions", "issue-labeler", "typesafe", "jev"],
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "lint": "node --run lint-biome && node --run lint-ts",
+    "lint-biome": "biome check --write",
+    "lint-ts": "tsc --noEmit",
+    "test": "vitest",
+    "test-coverage": "vitest run --coverage",
+    "smoke": "tsx scripts/smoke.ts",
+    "all": "node --run lint && node --run test && node --run build"
+  },
+  "dependencies": {
+    "@actions/core": "^3.0.1",
+    "@actions/github": "^9.1.1",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "@types/node": "^24.13.4",
+    "@vitest/coverage-v8": "^5.0.1",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}
