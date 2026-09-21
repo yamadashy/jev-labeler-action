@@ -94,6 +94,38 @@ Exclude labels that record a decision or an event rather than a property of the 
 | `model` | `jev-1.13.0` | Pinned so a tuned threshold does not shift when `jev-latest` moves. |
 | `max-body-chars` | `6000` | Longer issue bodies are truncated. |
 
+### Customized example
+
+```yaml
+- uses: yamadashy/jev-labeler-action@v0
+  with:
+    api-key: ${{ secrets.TYPESAFE_API_KEY }}
+
+    # Stricter than the default 0.8: fewer labels, fewer mistakes.
+    threshold: 0.9
+
+    # Consider only these labels instead of every described label.
+    labels: |
+      bug
+      enhancement
+      question
+
+    # Or keep every label and leave some out. Replaces the default list.
+    # exclude-labels: |
+    #   duplicate
+    #   wontfix
+    #   dependencies
+
+    # Your own words instead of the label's GitHub description.
+    # A label listed here is considered even if it has no description.
+    criteria: |
+      bug: The author reports that the tool crashes, errors, or produces wrong output.
+      question: The author asks how to do something rather than reporting a defect.
+
+    # Applied when no label reaches the threshold.
+    fallback-label: triage
+```
+
 ## Outputs
 
 | Output | Description |
