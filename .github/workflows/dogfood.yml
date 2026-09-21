@@ -1,24 +1,19 @@
-# Runs the action from this very repository, in dry-run, on its own issues.
-#
-# Dry-run on purpose: this repo is where the action gets exercised before a tag
-# goes out, and a run from an unreviewed commit should not be able to change
-# anything. Read the Job Summary to see what it would have done.
-name: Dogfood (dry run)
+# Runs the action from this very repository on its own issues, so every change
+# on main is exercised end to end, including the write path, before a tag moves.
+name: Dogfood
 
 on:
   issues:
-    types: [opened, edited, reopened]
-  workflow_dispatch:
+    types: [opened]
 
-permissions:
-  contents: read
-  issues: write
+permissions: {}
 
 jobs:
   label:
     runs-on: ubuntu-latest
-    # `workflow_dispatch` has no issue to label; the step would fail by design.
-    if: github.event_name == 'issues'
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -26,4 +21,3 @@ jobs:
       - uses: ./
         with:
           api-key: ${{ secrets.TYPESAFE_API_KEY }}
-          dry-run: true

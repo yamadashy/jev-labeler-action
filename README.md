@@ -20,30 +20,39 @@ wrong label. It cannot make the action say, run, or fetch anything.
 
 ## Quick start
 
-Start in dry-run so you can read the numbers before anything touches your issues:
+1. Get an API key from [TypeSafe](https://docs.typesafe.ai) and store it as a repository secret:
 
-```yaml
-name: Label issues
+   ```sh
+   gh secret set TYPESAFE_API_KEY
+   ```
 
-on:
-  issues:
-    types: [opened, edited, reopened]
+2. Add `.github/workflows/label-issues.yml`:
 
-permissions:
-  contents: read
-  issues: write
+   ```yaml
+   name: Label issues
 
-jobs:
-  label:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: yamadashy/jev-labeler-action@v1
-        with:
-          api-key: ${{ secrets.TYPESAFE_API_KEY }}
-          dry-run: true
-```
+   on:
+     issues:
+       types: [opened]
 
-Open the run's **Job Summary**, look at the probability table, then drop `dry-run` when you like what you see.
+   permissions: {}
+
+   jobs:
+     label:
+       runs-on: ubuntu-latest
+       permissions:
+         issues: write
+       steps:
+         - uses: yamadashy/jev-labeler-action@v0
+           with:
+             api-key: ${{ secrets.TYPESAFE_API_KEY }}
+   ```
+
+That is the whole setup. The next issue that is opened gets the labels whose probability is at or above `0.8`,
+and the run's **Job Summary** shows the probability of every label that was considered. The action only ever
+adds labels, so a wrong pick is one click to undo.
+
+To see the numbers without touching any issue first, add `dry-run: true`.
 
 ## Inputs
 
@@ -136,7 +145,7 @@ fires. On a real Repomix question ([#303](https://github.com/yamadashy/repomix/i
 the same with WIKI?"*) the zero-config probability was `0.60`; one line of `criteria` took it to `0.88`:
 
 ```yaml
-- uses: yamadashy/jev-labeler-action@v1
+- uses: yamadashy/jev-labeler-action@v0
   with:
     api-key: ${{ secrets.TYPESAFE_API_KEY }}
     criteria: |
