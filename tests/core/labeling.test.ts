@@ -105,35 +105,6 @@ describe('buildPlan', () => {
     expect(bug?.condition).toBe('reports a defect in shipped behaviour');
   });
 
-  it('keeps built-in exclusions when the user excludes something else', () => {
-    const plan = buildPlan({
-      repoLabels,
-      subject: subject(),
-      excludes: ['enhancement'],
-      builtinExcludes: ['duplicate'],
-    });
-    const excluded = plan.skipped.filter((row) => row.status === 'excluded').map((row) => row.label);
-    expect(excluded.sort()).toEqual(['duplicate', 'enhancement']);
-  });
-
-  it('considers a built-in exclusion again once the user names it', () => {
-    const viaAllowlist = buildPlan({
-      repoLabels,
-      subject: subject(),
-      builtinExcludes: ['duplicate'],
-      allowlist: ['duplicate'],
-    });
-    expect(viaAllowlist.planned.map((p) => p.label)).toEqual(['duplicate']);
-
-    const viaCriteria = buildPlan({
-      repoLabels,
-      subject: subject(),
-      builtinExcludes: ['duplicate'],
-      criteria: { duplicate: 'The author says this was already reported.' },
-    });
-    expect(viaCriteria.planned.map((p) => p.label)).toContain('duplicate');
-  });
-
   it('never considers a label the user excluded, even when it is named elsewhere', () => {
     const plan = buildPlan({
       repoLabels,

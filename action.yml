@@ -32,9 +32,7 @@ inputs:
     default: ''
   exclude-labels:
     description: >-
-      Labels never to apply, separated by newlines or commas. Added to the built-in exclusions
-      (duplicate, invalid, wontfix, good first issue, help wanted), which are maintainer decisions
-      rather than properties of the text. To have one of those considered, name it in labels or criteria.
+      Labels never to apply, separated by newlines or commas. Default: nothing is excluded.
     required: false
     default: ''
   criteria:

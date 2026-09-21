@@ -1,7 +1,6 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
 import {
-  BUILTIN_EXCLUDE_LABELS,
   parseBoolean,
   parseCriteria,
   parseList,
@@ -23,8 +22,6 @@ export async function run(): Promise<void> {
   const threshold = parseThreshold(core.getInput('threshold'));
   const maxBodyChars = parseMaxBodyChars(core.getInput('max-body-chars'));
   const allowlist = parseList(core.getInput('labels'));
-  // Added to the built-in exclusions rather than replacing them: someone who
-  // excludes one more label does not mean to start applying `duplicate`.
   const excludes = parseList(core.getInput('exclude-labels'));
   const criteria = parseCriteria(core.getInput('criteria'));
   const fallbackLabel = core.getInput('fallback-label').trim() || undefined;
@@ -58,7 +55,6 @@ export async function run(): Promise<void> {
     maxBodyChars,
     allowlist,
     excludes,
-    builtinExcludes: BUILTIN_EXCLUDE_LABELS,
     criteria,
     fallbackLabel,
     skipBots,
