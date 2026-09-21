@@ -1,4 +1,4 @@
-name: Jev Issue Labeler
+name: Jev Labeler
 description: Zero-config AI issue labeling with TypeSafe's Jev. One yes/no question per label, no generated text.
 author: Kazuki Yamada
 

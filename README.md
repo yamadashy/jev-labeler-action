@@ -1,4 +1,4 @@
-<h1 align="center">Jev Issue Labeler</h1>
+<h1 align="center">Jev Labeler</h1>
 
 <p align="center">
   <b>Zero-config AI issue labeling</b>

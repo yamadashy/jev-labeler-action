@@ -38,7 +38,7 @@ export function renderSummary(
 ): string {
   const lines: string[] = [];
 
-  lines.push(`## Jev issue labeler${dryRun ? ' (dry run)' : ''}`);
+  lines.push(`## Jev Labeler${dryRun ? ' (dry run)' : ''}`);
   lines.push('');
   lines.push(`Issue #${subject.number}: ${escapeCell(subject.title)}`);
   lines.push('');
