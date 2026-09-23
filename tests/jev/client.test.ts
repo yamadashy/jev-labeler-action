@@ -9,12 +9,15 @@ const ok = (body: unknown): Response =>
     headers: { get: () => null },
   }) as unknown as Response;
 
-const fail = (status: number, detail = '', retryAfter?: string): Response =>
+const fail = (status: number, detail = '', retryAfter?: string, contentType?: string): Response =>
   ({
     ok: false,
     status,
     text: async () => detail,
-    headers: { get: (name: string) => (name === 'retry-after' ? (retryAfter ?? null) : null) },
+    headers: {
+      get: (name: string) =>
+        name === 'retry-after' ? (retryAfter ?? null) : name === 'content-type' ? (contentType ?? null) : null,
+    },
   }) as unknown as Response;
 
 const answer = {
@@ -102,6 +105,34 @@ describe('ask', () => {
       /rejected the API key/,
     );
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a JSON 403 as a bad key', async () => {
+    const detail = '{"detail":{"error_type":"authentication_error","message":"Cannot authenticate with the server"}}';
+    const fetchImpl = vi.fn().mockResolvedValue(fail(403, detail, undefined, 'application/json'));
+    const error = await ask({ ...base, fetchImpl: fetchImpl as unknown as typeof fetch }).catch((e) => e);
+    expect(error).toBeInstanceOf(JevError);
+    expect((error as JevError).message).toMatch(/rejected the API key/);
+    expect((error as JevError).kind).toBeUndefined();
+  });
+
+  it('tells an HTML 403 from the firewall apart from a bad key, and does not retry it', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(fail(403, '<!DOCTYPE html><html><body>Forbidden</body></html>', undefined, 'text/html'));
+    const error = await ask({ ...base, fetchImpl: fetchImpl as unknown as typeof fetch }).catch((e) => e);
+    expect(error).toBeInstanceOf(JevError);
+    expect((error as JevError).kind).toBe('firewall');
+    expect((error as JevError).status).toBe(403);
+    expect((error as JevError).message).toMatch(/web application firewall/);
+    expect((error as JevError).message).not.toMatch(/API key/);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('recognises the firewall page by its body when the content type is missing', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(fail(403, '\n<!DOCTYPE html>'));
+    const error = await ask({ ...base, fetchImpl: fetchImpl as unknown as typeof fetch }).catch((e) => e);
+    expect((error as JevError).kind).toBe('firewall');
   });
 
   it('does not retry malformed questions', async () => {

@@ -53,6 +53,16 @@ export function renderSummary(
     return lines.join('\n');
   }
 
+  if (result.skippedReason === 'firewall') {
+    lines.push(
+      `Skipped: TypeSafe's firewall rejected the text of ${noun.toLowerCase()} #${subject.number} before Jev ` +
+        'evaluated it (HTTP 403). This happens when the body contains strings that look like an attack, such ' +
+        'as system file paths or shell download commands. Nothing was applied, including `fallback-label`.',
+    );
+    lines.push('');
+    return lines.join('\n');
+  }
+
   lines.push(
     dryRun
       ? `Nothing was applied. These are the labels that **would** be applied at a threshold of ${threshold}.`

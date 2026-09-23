@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { labelSubject } from '../../src/core/run.js';
 import type { LabelSubject, RepoLabel } from '../../src/core/types.js';
+import { FIREWALL_MESSAGE, JevError } from '../../src/jev/client.js';
 
 const repoLabels: RepoLabel[] = [
   { name: 'bug', description: "Something isn't working" },
@@ -100,5 +101,21 @@ describe('labelSubject', () => {
   it('lets a Jev failure propagate so the step fails without touching the issue', async () => {
     const askFn = vi.fn().mockRejectedValue(new Error('TypeSafe rate limit reached (429)'));
     await expect(labelSubject(subject, repoLabels, config, askFn)).rejects.toThrow(/429/);
+  });
+
+  it('skips, rather than fails, when the firewall refuses the text, and applies no fallback', async () => {
+    const askFn = vi.fn().mockRejectedValue(new JevError(FIREWALL_MESSAGE, 403, 'firewall'));
+    const result = await labelSubject(subject, repoLabels, { ...config, fallbackLabel: 'triage' }, askFn);
+
+    expect(askFn).toHaveBeenCalledTimes(1);
+    expect(result.skippedReason).toBe('firewall');
+    expect(result.applied).toEqual([]);
+    expect(result.probabilities).toEqual({});
+    expect(result.model).toBe('jev-1.13.0');
+  });
+
+  it('still fails on a bad key', async () => {
+    const askFn = vi.fn().mockRejectedValue(new JevError('TypeSafe rejected the API key (403).', 403));
+    await expect(labelSubject(subject, repoLabels, config, askFn)).rejects.toThrow(/API key/);
   });
 });

@@ -174,6 +174,9 @@ them out with `exclude-labels`.
   tool call.
 - The action only adds labels. It never removes, edits, closes, or comments.
 - The issue or pull request is read from the event payload inside the action, never through a shell.
+- If TypeSafe's firewall blocks the text (security reports quoting `/etc/passwd` or
+  `curl -sL -O https://...` can trip it), the issue is skipped with a warning, not a failure, and no label is
+  applied.
 - `pull_request_target` is safe here because the action never checks out, builds, or runs pull request code:
   it reads the payload and asks the API for the file list. **Do not add a step that does.** An
   `actions/checkout` of the pull request head in the same job would hand a fork's code the write token and

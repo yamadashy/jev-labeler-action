@@ -85,15 +85,28 @@ export interface AskOptions {
   signal?: AbortSignal;
 }
 
-/** Thrown for every non-OK response, so callers can branch on `status` if they want to. */
+/**
+ * `firewall` means the request never reached Jev: a web application firewall in
+ * front of the API refused the body. See `isFirewallRejection`.
+ */
+export type JevErrorKind = 'firewall';
+
+/** Thrown for every non-OK response, so callers can branch on `status` or `kind` if they want to. */
 export class JevError extends Error {
   readonly status?: number;
-  constructor(message: string, status?: number) {
+  readonly kind?: JevErrorKind;
+  constructor(message: string, status?: number, kind?: JevErrorKind) {
     super(message);
     this.name = 'JevError';
     this.status = status;
+    this.kind = kind;
   }
 }
+
+export const FIREWALL_MESSAGE =
+  "TypeSafe's API rejected the text of this issue or pull request before evaluating it (HTTP 403 from a web application firewall). " +
+  'This happens when the body contains strings that look like an attack, such as system file paths or shell ' +
+  'download commands. No labels were applied.';
 
 const RETRYABLE = new Set([429, 529]);
 
@@ -150,6 +163,8 @@ export async function ask(options: AskOptions): Promise<AskResult> {
     }
 
     const detail = await response.text().catch(() => '');
+    // Deterministic for a given body, so it is thrown at once rather than retried.
+    if (isFirewallRejection(response, detail)) throw new JevError(FIREWALL_MESSAGE, response.status, 'firewall');
     const error = new JevError(describe(response.status, detail), response.status);
     if (!RETRYABLE.has(response.status) || attempt === maxAttempts) throw error;
 
@@ -172,6 +187,21 @@ function retryAfterMs(response: Response): number | undefined {
   if (!header) return undefined;
   const seconds = Number(header);
   return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : undefined;
+}
+
+/**
+ * A 403 from the firewall in front of the API, as opposed to one from the API itself.
+ *
+ * The API answers a bad key with a JSON body (`{"detail":{"error_type":"authentication_error",...}}`).
+ * The firewall answers a body it dislikes (`/etc/passwd`, `curl -sL -O https://...`, and the like,
+ * so mostly security reports) with an HTML page. Only a positive sign of HTML counts: an HTML
+ * content type or a body that opens with a tag. Anything else, including an empty body, stays an
+ * auth failure, so an unfamiliar 403 still fails the job loudly instead of being skipped.
+ */
+function isFirewallRejection(response: Response, detail: string): boolean {
+  if (response.status !== 403) return false;
+  const contentType = response.headers?.get?.('content-type') ?? '';
+  return contentType.toLowerCase().includes('text/html') || detail.trimStart().startsWith('<');
 }
 
 function describe(status: number, detail: string): string {

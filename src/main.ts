@@ -12,7 +12,7 @@ import { MAX_FILES, withPatches } from './core/labeling.js';
 import { labelSubject } from './core/run.js';
 import { subjectFromContext, UnsupportedEventError } from './github/event.js';
 import { addLabels, listChangedFiles, listRepoLabels } from './github/labels.js';
-import { DEFAULT_MODEL } from './jev/client.js';
+import { DEFAULT_MODEL, FIREWALL_MESSAGE } from './jev/client.js';
 import { renderSummary } from './summary.js';
 
 export async function run(): Promise<void> {
@@ -63,6 +63,8 @@ export async function run(): Promise<void> {
   if (result.skippedReason === 'bot-author') {
     core.info(`Skipping: #${subject.number} was opened by the app ${subject.author.login}.`);
   }
+  // Not a failure: the key works, and the same text would be refused on every re-run.
+  if (result.skippedReason === 'firewall') core.warning(FIREWALL_MESSAGE);
 
   for (const row of result.rows) {
     if (row.probability !== null) core.info(`${row.label}: ${row.probability.toFixed(2)} (${row.status})`);

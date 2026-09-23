@@ -66,6 +66,18 @@ describe('renderSummary', () => {
     expect(markdown).not.toContain('| Label |');
   });
 
+  it('explains a firewall rejection instead of printing an empty table', () => {
+    const markdown = renderSummary(
+      { ...result, applied: [], probabilities: {}, rows: [], evaluatedCount: 0, skippedReason: 'firewall' },
+      subject,
+      0.8,
+      false,
+    );
+    expect(markdown).toContain('firewall');
+    expect(markdown).toContain('fallback-label');
+    expect(markdown).not.toContain('| Label |');
+  });
+
   it('calls a pull request a pull request', () => {
     const markdown = renderSummary(result, { ...subject, kind: 'pull_request' }, 0.8, false);
     expect(markdown).toContain('Pull request #3');

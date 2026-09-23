@@ -1,4 +1,4 @@
-import { type AskResult, ask } from '../jev/client.js';
+import { type AskResult, ask, JevError } from '../jev/client.js';
 import { buildPlan, buildState, type Decision, decide } from './labeling.js';
 import type { LabelSubject, RepoLabel } from './types.js';
 
@@ -30,8 +30,11 @@ export interface LabelRunResult extends Decision {
   usage: AskResult['usage'];
   /** How many labels were actually sent to Jev. */
   evaluatedCount: number;
-  /** Set when the run stopped before asking anything, so the summary can say why. */
-  skippedReason?: 'bot-author';
+  /**
+   * Set when the run ended without an answer, so the summary can say why:
+   * `bot-author` stopped before asking, `firewall` asked but the API's firewall refused the text.
+   */
+  skippedReason?: 'bot-author' | 'firewall';
 }
 
 export type AskFn = typeof ask;
@@ -85,13 +88,30 @@ export async function labelSubject(
     };
   }
 
-  const response = await askFn({
-    apiKey: config.apiKey,
-    model: config.model,
-    state: buildState(subject, config.maxBodyChars),
-    questions: plan.questions,
-    endpoint: config.endpoint,
-  });
+  let response: AskResult;
+  try {
+    response = await askFn({
+      apiKey: config.apiKey,
+      model: config.model,
+      state: buildState(subject, config.maxBodyChars),
+      questions: plan.questions,
+      endpoint: config.endpoint,
+    });
+  } catch (error) {
+    if (!(error instanceof JevError && error.kind === 'firewall')) throw error;
+    // Nothing was evaluated, so the fallback label is not applied either: it
+    // means "Jev saw it and nothing fit", and here Jev never saw it.
+    return {
+      applied: [],
+      probabilities: {},
+      rows: [],
+      model: config.model,
+      ms: 0,
+      usage: { input_tokens: 0, output_tokens: 0 },
+      evaluatedCount: 0,
+      skippedReason: 'firewall',
+    };
+  }
 
   const decision = decide({
     plan,

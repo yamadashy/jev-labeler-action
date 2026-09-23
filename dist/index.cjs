@@ -21377,12 +21377,12 @@ var require_log = __commonJS({
       if (logLevel === "debug")
         console.log(...messages);
     }
-    function warn(logLevel, warning) {
+    function warn(logLevel, warning2) {
       if (logLevel === "debug" || logLevel === "warn") {
         if (typeof node_process.emitWarning === "function")
-          node_process.emitWarning(warning);
+          node_process.emitWarning(warning2);
         else
-          console.warn(warning);
+          console.warn(warning2);
       }
     }
     exports2.debug = debug2;
@@ -24852,9 +24852,9 @@ var require_composer = __commonJS({
         this.prelude = [];
         this.errors = [];
         this.warnings = [];
-        this.onError = (source, code, message, warning) => {
+        this.onError = (source, code, message, warning2) => {
           const pos = getErrorPos(source);
-          if (warning)
+          if (warning2)
             this.warnings.push(new errors.YAMLWarning(pos, code, message));
           else
             this.errors.push(new errors.YAMLParseError(pos, code, message));
@@ -24927,10 +24927,10 @@ ${cb}` : comment;
           console.dir(token, { depth: null });
         switch (token.type) {
           case "directive":
-            this.directives.add(token.source, (offset, message, warning) => {
+            this.directives.add(token.source, (offset, message, warning2) => {
               const pos = getErrorPos(token);
               pos[0] += offset;
-              this.onError(pos, "BAD_DIRECTIVE", message, warning);
+              this.onError(pos, "BAD_DIRECTIVE", message, warning2);
             });
             this.prelude.push(token.source);
             this.atDirectives = true;
@@ -26972,7 +26972,7 @@ var require_public_api = __commonJS({
       const doc = parseDocument(src, options);
       if (!doc)
         return null;
-      doc.warnings.forEach((warning) => log.warn(doc.options.logLevel, warning));
+      doc.warnings.forEach((warning2) => log.warn(doc.options.logLevel, warning2));
       if (doc.errors.length > 0) {
         if (doc.options.logLevel !== "silent")
           throw doc.errors[0];
@@ -27553,6 +27553,9 @@ function setFailed(message) {
 }
 function error(message, properties = {}) {
   issueCommand("error", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
+}
+function warning(message, properties = {}) {
+  issueCommand("warning", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
 function info(message) {
   process.stdout.write(message + os4.EOL);
@@ -31907,12 +31910,15 @@ var DEFAULT_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 var DEFAULT_MODEL = "jev-1.13.0";
 var JevError = class extends Error {
   status;
-  constructor(message, status) {
+  kind;
+  constructor(message, status, kind) {
     super(message);
     this.name = "JevError";
     this.status = status;
+    this.kind = kind;
   }
 };
+var FIREWALL_MESSAGE = "TypeSafe's API rejected the text of this issue or pull request before evaluating it (HTTP 403 from a web application firewall). This happens when the body contains strings that look like an attack, such as system file paths or shell download commands. No labels were applied.";
 var RETRYABLE = /* @__PURE__ */ new Set([429, 529]);
 var defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function ask(options) {
@@ -31954,6 +31960,7 @@ async function ask(options) {
       return { ...body, ms: Date.now() - started };
     }
     const detail = await response.text().catch(() => "");
+    if (isFirewallRejection(response, detail)) throw new JevError(FIREWALL_MESSAGE, response.status, "firewall");
     const error2 = new JevError(describe(response.status, detail), response.status);
     if (!RETRYABLE.has(response.status) || attempt === maxAttempts) throw error2;
     lastError = error2;
@@ -31969,6 +31976,11 @@ function retryAfterMs(response) {
   if (!header) return void 0;
   const seconds = Number(header);
   return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1e3 : void 0;
+}
+function isFirewallRejection(response, detail) {
+  if (response.status !== 403) return false;
+  const contentType = response.headers?.get?.("content-type") ?? "";
+  return contentType.toLowerCase().includes("text/html") || detail.trimStart().startsWith("<");
 }
 function describe(status, detail) {
   const trimmed = detail.trim().slice(0, 300);
@@ -32025,13 +32037,28 @@ async function labelSubject(subject, repoLabels, config, askFn = ask) {
       evaluatedCount: 0
     };
   }
-  const response = await askFn({
-    apiKey: config.apiKey,
-    model: config.model,
-    state: buildState(subject, config.maxBodyChars),
-    questions: plan.questions,
-    endpoint: config.endpoint
-  });
+  let response;
+  try {
+    response = await askFn({
+      apiKey: config.apiKey,
+      model: config.model,
+      state: buildState(subject, config.maxBodyChars),
+      questions: plan.questions,
+      endpoint: config.endpoint
+    });
+  } catch (error2) {
+    if (!(error2 instanceof JevError && error2.kind === "firewall")) throw error2;
+    return {
+      applied: [],
+      probabilities: {},
+      rows: [],
+      model: config.model,
+      ms: 0,
+      usage: { input_tokens: 0, output_tokens: 0 },
+      evaluatedCount: 0,
+      skippedReason: "firewall"
+    };
+  }
   const decision = decide({
     plan,
     answers: response.answers,
@@ -32155,6 +32182,13 @@ function renderSummary(result, subject, threshold, dryRun) {
     lines.push("");
     return lines.join("\n");
   }
+  if (result.skippedReason === "firewall") {
+    lines.push(
+      `Skipped: TypeSafe's firewall rejected the text of ${noun.toLowerCase()} #${subject.number} before Jev evaluated it (HTTP 403). This happens when the body contains strings that look like an attack, such as system file paths or shell download commands. Nothing was applied, including \`fallback-label\`.`
+    );
+    lines.push("");
+    return lines.join("\n");
+  }
   lines.push(
     dryRun ? `Nothing was applied. These are the labels that **would** be applied at a threshold of ${threshold}.` : result.applied.length > 0 ? `Applied: ${result.applied.map((label) => `\`${label}\``).join(", ")}` : "No label reached the threshold, so nothing was applied."
   );
@@ -32216,6 +32250,7 @@ async function run() {
   if (result.skippedReason === "bot-author") {
     info(`Skipping: #${subject.number} was opened by the app ${subject.author.login}.`);
   }
+  if (result.skippedReason === "firewall") warning(FIREWALL_MESSAGE);
   for (const row of result.rows) {
     if (row.probability !== null) info(`${row.label}: ${row.probability.toFixed(2)} (${row.status})`);
   }
