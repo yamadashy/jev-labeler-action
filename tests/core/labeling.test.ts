@@ -28,17 +28,21 @@ const subject = (overrides: Partial<LabelSubject> = {}): LabelSubject => ({
 });
 
 describe('buildPlan', () => {
-  it('asks one question per label that has a description', () => {
+  it('asks one question per label', () => {
     const plan = buildPlan({ repoLabels, subject: subject() });
 
-    expect(plan.planned.map((entry) => entry.label)).toEqual(['bug', 'enhancement', 'duplicate']);
-    expect(Object.keys(plan.questions)).toEqual(['l0', 'l1', 'l2']);
-    expect(plan.idToLabel).toEqual({ l0: 'bug', l1: 'enhancement', l2: 'duplicate' });
+    expect(plan.planned.map((entry) => entry.label)).toEqual(['bug', 'enhancement', 'triage', 'duplicate']);
+    expect(Object.keys(plan.questions)).toEqual(['l0', 'l1', 'l2', 'l3']);
+    expect(plan.idToLabel).toEqual({ l0: 'bug', l1: 'enhancement', l2: 'triage', l3: 'duplicate' });
   });
 
-  it('skips a label with no description and says why', () => {
+  it('asks about a label with no description by name alone', () => {
     const plan = buildPlan({ repoLabels, subject: subject() });
-    expect(plan.skipped).toContainEqual({ label: 'triage', probability: null, status: 'no-condition' });
+    expect(plan.idToLabel.l2).toBe('triage');
+    expect(plan.questions.l2.instructions).toBe(zeroConfigInstructions('triage'));
+    expect(plan.questions.l2.instructions).toContain('"triage"');
+    // Saying there is no description makes Jev hedge; the question just ends at the name.
+    expect(plan.questions.l2.instructions).not.toMatch(/description/i);
   });
 
   it('uses the measured zero-config wording, carrying the name and the description', () => {
@@ -75,7 +79,7 @@ describe('buildPlan', () => {
 
   it('honours the exclude list case-insensitively', () => {
     const plan = buildPlan({ repoLabels, subject: subject(), excludes: ['DUPLICATE'] });
-    expect(plan.planned.map((entry) => entry.label)).toEqual(['bug', 'enhancement']);
+    expect(plan.planned.map((entry) => entry.label)).toEqual(['bug', 'enhancement', 'triage']);
     expect(plan.skipped).toContainEqual({ label: 'duplicate', probability: null, status: 'excluded' });
   });
 
@@ -278,7 +282,7 @@ describe('decide', () => {
     });
 
     expect(decision.applied).toEqual(['bug', 'enhancement']);
-    expect(decision.probabilities).toEqual({ bug: 0.94, enhancement: 0.8, duplicate: 0.12 });
+    expect(decision.probabilities).toEqual({ bug: 0.94, enhancement: 0.8, triage: 0.12 });
   });
 
   it('maps generated ids back to label names', () => {
@@ -294,7 +298,7 @@ describe('decide', () => {
   it('reports a missing answer rather than guessing', () => {
     const decision = decide({ plan, answers: {}, threshold: 0.8, subject: subject() });
     expect(decision.applied).toEqual([]);
-    expect(decision.rows.filter((row) => row.status === 'no-answer')).toHaveLength(3);
+    expect(decision.rows.filter((row) => row.status === 'no-answer')).toHaveLength(4);
   });
 
   it('applies the fallback only when nothing passed', () => {

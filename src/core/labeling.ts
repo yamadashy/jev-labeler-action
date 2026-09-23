@@ -25,11 +25,16 @@ const SUBJECT_NOUN: Record<SubjectKind, string> = {
  * action actually sends. Reword it and those numbers stop being true. The pull
  * request sentence differs only in the noun, and was measured the same way.
  *
+ * A label without a description is asked about by name alone. The question then
+ * simply stops after the name: saying outright that there is no description was
+ * measured to make Jev hedge, sinking every probability below the threshold.
+ *
  * Deliberately free of digits: digits inside `instructions` measurably pull Jev's
  * probabilities around, and this question has no reason to contain any.
  */
-export function zeroConfigInstructions(label: string, description: string, kind: SubjectKind = 'issue'): string {
-  return `A maintainer triaging this ${SUBJECT_NOUN[kind]} would put the label "${label}" on it. The repository describes that label as: "${description}".`;
+export function zeroConfigInstructions(label: string, description?: string, kind: SubjectKind = 'issue'): string {
+  const ask = `A maintainer triaging this ${SUBJECT_NOUN[kind]} would put the label "${label}" on it.`;
+  return description ? `${ask} The repository describes that label as: "${description}".` : ask;
 }
 
 export interface PlanOptions {
@@ -47,7 +52,8 @@ export interface PlanOptions {
 export interface PlannedLabel {
   id: string;
   label: string;
-  condition: string;
+  /** The hand-written criteria or GitHub description; absent when asked by name alone. */
+  condition?: string;
 }
 
 export interface EvaluationPlan {
@@ -104,11 +110,7 @@ export function buildPlan(options: PlanOptions): EvaluationPlan {
       continue;
     }
 
-    const condition = override ?? repoLabel.description?.trim();
-    if (!condition) {
-      skipped.push({ label: repoLabel.name, probability: null, status: 'no-condition' });
-      continue;
-    }
+    const condition = override ?? (repoLabel.description?.trim() || undefined);
 
     const id = `l${index++}`;
     // A hand-written condition is sent as the whole question, the way the
@@ -234,7 +236,7 @@ export function decide(options: DecideOptions): Decision {
   if (fallback && applied.length === 0 && !present.has(canonical(fallback))) {
     applied.push(fallback);
     // The fallback need not be one of the evaluated labels — it may have been
-    // excluded, or have no description — so it gets its own row when absent.
+    // excluded or not allowlisted — so it gets its own row when absent.
     const existing = allRows.find((row) => canonical(row.label) === canonical(fallback));
     if (existing) {
       existing.status = 'applied-as-fallback';

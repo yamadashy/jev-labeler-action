@@ -31795,7 +31795,8 @@ var SUBJECT_NOUN = {
   pull_request: "GitHub pull request"
 };
 function zeroConfigInstructions(label, description, kind = "issue") {
-  return `A maintainer triaging this ${SUBJECT_NOUN[kind]} would put the label "${label}" on it. The repository describes that label as: "${description}".`;
+  const ask2 = `A maintainer triaging this ${SUBJECT_NOUN[kind]} would put the label "${label}" on it.`;
+  return description ? `${ask2} The repository describes that label as: "${description}".` : ask2;
 }
 function buildPlan(options) {
   const { repoLabels, subject } = options;
@@ -31826,11 +31827,7 @@ function buildPlan(options) {
       skipped.push({ label: repoLabel.name, probability: null, status: "not-allowlisted" });
       continue;
     }
-    const condition = override ?? repoLabel.description?.trim();
-    if (!condition) {
-      skipped.push({ label: repoLabel.name, probability: null, status: "no-condition" });
-      continue;
-    }
+    const condition = override ?? (repoLabel.description?.trim() || void 0);
     const id = `l${index++}`;
     questions[id] = {
       type: "noul",
@@ -32133,7 +32130,6 @@ var STATUS_TEXT = {
   "already-present": "skipped \u2014 already on the issue",
   excluded: "skipped \u2014 excluded",
   "not-allowlisted": "skipped \u2014 not in `labels`",
-  "no-condition": "skipped \u2014 no description or criteria",
   "below-threshold": "skipped \u2014 below threshold",
   "no-answer": "skipped \u2014 no answer returned"
 };

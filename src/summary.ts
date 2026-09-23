@@ -15,7 +15,6 @@ const STATUS_TEXT: Record<RowStatus, string> = {
   'already-present': 'skipped — already on the issue',
   excluded: 'skipped — excluded',
   'not-allowlisted': 'skipped — not in `labels`',
-  'no-condition': 'skipped — no description or criteria',
   'below-threshold': 'skipped — below threshold',
   'no-answer': 'skipped — no answer returned',
 };

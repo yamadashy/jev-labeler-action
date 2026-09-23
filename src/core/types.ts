@@ -37,13 +37,7 @@ export interface SubjectAuthor {
   isBot: boolean;
 }
 
-export type SkipReason =
-  | 'already-present'
-  | 'excluded'
-  | 'not-allowlisted'
-  | 'no-condition'
-  | 'below-threshold'
-  | 'no-answer';
+export type SkipReason = 'already-present' | 'excluded' | 'not-allowlisted' | 'below-threshold' | 'no-answer';
 
 export type RowStatus = 'applied' | 'applied-as-fallback' | SkipReason;
 

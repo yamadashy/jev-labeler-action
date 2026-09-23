@@ -18,7 +18,7 @@ const result: LabelRunResult = {
   rows: [
     { label: 'question', probability: 0.04, status: 'below-threshold' },
     { label: 'bug', probability: 0.93, status: 'applied' },
-    { label: 'triage', probability: null, status: 'no-condition' },
+    { label: 'triage', probability: null, status: 'excluded' },
   ],
   model: 'jev-1.13.0',
   ms: 412,

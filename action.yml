@@ -27,7 +27,7 @@ inputs:
   labels:
     description: >-
       Optional allowlist of labels to consider, separated by newlines or commas.
-      Default: every repository label that has a description.
+      Default: every repository label.
     required: false
     default: ''
   exclude-labels:
@@ -38,7 +38,7 @@ inputs:
   criteria:
     description: >-
       Optional YAML mapping of label name to a plain-language condition, overriding or adding to the
-      label's GitHub description. A label listed here is considered even if it has no description.
+      label's GitHub description.
     required: false
     default: ''
   fallback-label:

@@ -10,7 +10,7 @@
 </p>
 
 Asks [Jev](https://docs.typesafe.ai) one yes/no question per repository label, built from the description the
-label already has in GitHub, and adds the labels that clear a threshold.
+label already has in GitHub (or from its name alone), and adds the labels that clear a threshold.
 
 Jev returns probabilities, never text. A hostile issue body can at worst earn a wrong label: there is no
 comment to hijack and no tool to call.
@@ -90,8 +90,8 @@ tokens without improving the answer (see [Measured](#measured)).
 
 ## Better labels
 
-**The label description is the prompt.** Improving a description on GitHub improves the labeling, and a label
-with no description is skipped.
+**The label name and description are the prompt.** Improving a description on GitHub improves the labeling. A
+label with no description is asked about by name alone, which works when the name says what it means.
 
 Some of GitHub's default descriptions mislead when read literally. `question` says *"Further information is
 requested"*, which describes a maintainer asking, so it never fires. Override it with `criteria`:
@@ -119,7 +119,7 @@ them out with `exclude-labels`.
 | `api-key` | *(required)* | TypeSafe API key. |
 | `github-token` | `${{ github.token }}` | Needs `issues: write`, plus `pull-requests: read` for pull requests. |
 | `threshold` | `0.8` | Apply a label at or above this probability. |
-| `labels` | *(all described labels)* | Allowlist, newline- or comma-separated. |
+| `labels` | *(all labels)* | Allowlist, newline- or comma-separated. |
 | `exclude-labels` | *(none)* | Labels never to apply. |
 | `criteria` | *(none)* | YAML map of label to a plain-language condition, replacing its description. |
 | `fallback-label` | *(none)* | Applied when nothing clears the threshold. |
@@ -139,7 +139,7 @@ them out with `exclude-labels`.
     # Stricter than the default 0.8: fewer labels, fewer mistakes.
     threshold: 0.9
 
-    # Consider only these labels instead of every described label.
+    # Consider only these labels instead of every label.
     labels: |
       bug
       enhancement
@@ -152,7 +152,6 @@ them out with `exclude-labels`.
     #   dependencies
 
     # Your own words instead of the label's GitHub description.
-    # A label listed here is considered even if it has no description.
     criteria: |
       bug: The author reports that the tool crashes, errors, or produces wrong output.
       question: The author asks how to do something rather than reporting a defect.

@@ -23,7 +23,7 @@ describe('labelSubject', () => {
   it('asks once for every candidate label and applies what passes', async () => {
     const askFn = vi.fn().mockResolvedValue({
       model: 'jev-1.13.0',
-      answers: { l0: { type: 'noul', noul: 0.05 }, l1: { type: 'noul', noul: 0.93 } },
+      answers: { l0: { type: 'noul', noul: 0.05 }, l1: { type: 'noul', noul: 0.93 }, l2: { type: 'noul', noul: 0.1 } },
       usage: { input_tokens: 300, output_tokens: 40 },
       ms: 400,
     });
@@ -31,20 +31,25 @@ describe('labelSubject', () => {
     const result = await labelSubject(subject, repoLabels, config, askFn);
 
     expect(askFn).toHaveBeenCalledTimes(1);
-    expect(Object.keys(askFn.mock.calls[0][0].questions)).toHaveLength(2);
+    expect(Object.keys(askFn.mock.calls[0][0].questions)).toHaveLength(3);
     expect(result.applied).toEqual(['question']);
-    expect(result.evaluatedCount).toBe(2);
+    expect(result.evaluatedCount).toBe(3);
     expect(result.model).toBe('jev-1.13.0');
   });
 
   it('spends no request when nothing is left to ask about', async () => {
     const askFn = vi.fn();
-    const result = await labelSubject(subject, [{ name: 'triage', description: null }], config, askFn);
+    const result = await labelSubject(
+      subject,
+      [{ name: 'triage', description: null }],
+      { ...config, excludes: ['triage'] },
+      askFn,
+    );
 
     expect(askFn).not.toHaveBeenCalled();
     expect(result.applied).toEqual([]);
     expect(result.usage).toEqual({ input_tokens: 0, output_tokens: 0 });
-    expect(result.rows).toEqual([{ label: 'triage', probability: null, status: 'no-condition' }]);
+    expect(result.rows).toEqual([{ label: 'triage', probability: null, status: 'excluded' }]);
   });
 
   it('still applies a fallback when there was nothing to ask', async () => {
@@ -52,7 +57,7 @@ describe('labelSubject', () => {
     const result = await labelSubject(
       subject,
       [{ name: 'triage', description: null }],
-      { ...config, fallbackLabel: 'triage' },
+      { ...config, excludes: ['triage'], fallbackLabel: 'triage' },
       askFn,
     );
     expect(result.applied).toEqual(['triage']);
