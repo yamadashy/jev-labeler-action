@@ -13,6 +13,13 @@ permissions: {}
 
 jobs:
   label:
+    # The action skips bot-authored issues and pull requests by default
+    # (`skip-bots`), so running it on them exercises nothing. Dependabot runs
+    # also receive no Actions secrets, which made this job fail on every
+    # Dependabot PR for want of `api-key`. Mirror the action's bot check here.
+    if: >-
+      (github.event.pull_request.user.type || github.event.issue.user.type) != 'Bot' &&
+      !endsWith(github.event.pull_request.user.login || github.event.issue.user.login, '[bot]')
     runs-on: ubuntu-latest
     permissions:
       contents: read
